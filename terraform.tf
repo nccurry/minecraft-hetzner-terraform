@@ -190,6 +190,7 @@ resource "hcloud_volume" "default" {
   name     = "${var.app_name}-${var.deployment_name}-data"
   size     = var.data_volume_size
   location = var.server_location
+  delete_protection = true
   format   = "xfs"
   labels = {
     "app" : var.app_name
