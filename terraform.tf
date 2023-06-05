@@ -1,11 +1,11 @@
 terraform {
   required_version = ">= 0.14"
-    required_providers {
-      hcloud = {
-        source = "hetznercloud/hcloud"
-        version = ">= 1.39.0, < 2.0.0"
-      }
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = ">= 1.39.0, < 2.0.0"
     }
+  }
 }
 
 variable "app_name" {
@@ -24,7 +24,6 @@ variable "server_image" {
   description = "Image for the server."
   type        = string
   default     = "fedora-38"
-
 }
 
 variable "server_type" {
@@ -58,26 +57,20 @@ variable "download_private_ssh_key" {
 
 variable "data_volume_size" {
   description = "The size of the data volume in GB"
-  type = number
-  default = 50
+  type        = number
+  default     = 50
 }
 
 variable "data_volume_device" {
   description = "The device name of the data volume"
-  type = string
-  default = "/dev/sdb"
+  type        = string
+  default     = "/dev/sdb"
 }
 
 variable "data_volume_mount_path" {
   description = "The mount path of the data volume"
-  type = string
-  default = "/opt/mcserver"
-}
-
-variable "data_volume_snapshot_schedule" {
-  description = "How often to snapshot the data volume"
-  type = string
-  default = "0 0 * * *"
+  type        = string
+  default     = "/opt/mcserver"
 }
 
 # https://github.com/mtoensing/Docker-Minecraft-PaperMC-Server
@@ -97,7 +90,7 @@ variable "papermc_container_tag" {
 variable "papermc_server_memory_size" {
   description = "The value for the papermc container MEMORYSIZE environment variable"
   type        = string
-  default = "6G"
+  default     = "6G"
 }
 
 resource "tls_private_key" "default" {
@@ -108,56 +101,64 @@ resource "tls_private_key" "default" {
 resource "hcloud_ssh_key" "default" {
   name       = "${var.app_name}-${var.deployment_name}"
   public_key = tls_private_key.default.public_key_openssh
+  labels = {
+    "app" : var.app_name
+    "deployment" : var.deployment_name
+  }
 }
 
 resource "hcloud_firewall" "default" {
   name = "${var.app_name}-${var.deployment_name}"
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "22"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "22"
     source_ips = var.allowlisted_cidr_ranges
   }
 
   # Java edition
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "25565"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "25565"
     source_ips = var.allowlisted_cidr_ranges
   }
 
   # Bedrock edition
   rule {
-    direction = "in"
-    protocol  = "udp"
-    port      = "19132"
+    direction  = "in"
+    protocol   = "udp"
+    port       = "19132"
     source_ips = var.allowlisted_cidr_ranges
   }
 
   # Plan
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "8804"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "8804"
     source_ips = var.allowlisted_cidr_ranges
   }
 
   # Bluemap
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "8100"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "8100"
     source_ips = var.allowlisted_cidr_ranges
+  }
+  labels = {
+    "app" : var.app_name
+    "deployment" : var.deployment_name
   }
 }
 
 resource "hcloud_server" "default" {
-  name        = "${var.app_name}-${var.deployment_name}"
-  image       = var.server_image
-  server_type = var.server_type
-  location    = var.server_location
-  ssh_keys    = [hcloud_ssh_key.default.id]
+  name         = "${var.app_name}-${var.deployment_name}"
+  image        = var.server_image
+  server_type  = var.server_type
+  location     = var.server_location
+  ssh_keys     = [hcloud_ssh_key.default.id]
   firewall_ids = [hcloud_firewall.default.id]
   public_net {
     ipv4_enabled = true
@@ -165,37 +166,35 @@ resource "hcloud_server" "default" {
   }
   labels = {
     "app" : var.app_name
-    "deployment": var.deployment_name
+    "deployment" : var.deployment_name
   }
   user_data = templatefile("${path.module}/files/user-data.yaml.tpl", {
     public_ssh_key = tls_private_key.default.public_key_openssh,
-    partition_and_mount_disk_sh_contents =  templatefile("${path.module}/files/partition-and-mount-disk.sh.tpl", {
-      data_volume_device = var.data_volume_device
+    partition_and_mount_disk_sh_contents = templatefile("${path.module}/files/partition-and-mount-disk.sh.tpl", {
+      data_volume_device     = var.data_volume_device
       data_volume_mount_path = var.data_volume_mount_path
     })
     download_papermc_plugins_sh_contents = templatefile("${path.module}/files/download-papermc-plugins.sh.tpl", {
       data_volume_mount_path = var.data_volume_mount_path
     })
     mcserver_service_contents = templatefile("${path.module}/files/mcserver.service.tpl", {
-      data_volume_mount_path = var.data_volume_mount_path
-      papermc_container_image = var.papermc_container_image
-      papermc_container_tag = var.papermc_container_tag
+      data_volume_mount_path    = var.data_volume_mount_path
+      papermc_container_image   = var.papermc_container_image
+      papermc_container_tag     = var.papermc_container_tag
       papermc_server_memorysize = var.papermc_server_memory_size
     })
   })
 }
 
 resource "hcloud_volume" "default" {
-  name = "${var.app_name}-${var.deployment_name}-data"
-  size = var.data_volume_size
+  name     = "${var.app_name}-${var.deployment_name}-data"
+  size     = var.data_volume_size
   location = var.server_location
-  format = "xfs"
-}
-
-resource "hcloud_volume_snapshot" "my_volume_snapshot" {
-  volume_id  = hcloud_volume.default.id
-  name       = "${var.app_name}-${var.deployment_name}-data"
-  schedule   = var.data_disk_snapshot_schedule
+  format   = "xfs"
+  labels = {
+    "app" : var.app_name
+    "deployment" : var.deployment_name
+  }
 }
 
 resource "hcloud_volume_attachment" "default" {
